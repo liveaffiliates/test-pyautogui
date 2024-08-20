@@ -1,4 +1,5 @@
 import pyautogui
+from pyautogui import ImageNotFoundException
 
 def example_using_pyautogui():
     """
@@ -14,10 +15,13 @@ def example_locate_on_screen(image_path):
     """
     Example method using pyautogui to locate an image on the screen.
     """
-    location = pyautogui.locateOnScreen(image_path)
-    if location:
-        print(f"Image found at: {location}")
-    else:
+    try:
+        location = pyautogui.locateOnScreen(image_path)
+        if location:
+            print(f"Image found at: {location}")
+        else:
+            print("Image not found on the screen.")
+    except ImageNotFoundException:
         print("Image not found on the screen.")
 
 if __name__ == "__main__":
