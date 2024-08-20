@@ -9,7 +9,8 @@ def example_using_pyautogui():
     # Click the mouse at the current position
     pyautogui.click()
     # Take a screenshot and save it as test.png
-    pyautogui.screenshot('test.png')
+    screenshot = pyautogui.screenshot()
+    screenshot.save('test.png')
     pyautogui.click()
 
 # Example usage
