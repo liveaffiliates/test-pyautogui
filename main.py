@@ -14,9 +14,9 @@ def example_locate_on_screen(image_path):
     Example method using pyautogui to locate an image on the screen.
     """
     try:
-        location = pyautogui.locateOnScreen(image_path)
+        location = pyautogui.locateCenterOnScreen(image_path)
         if location:
-            print(f"Image found at: {location}")
+            print(f"Image center found at: {location}")
         else:
             print("Image not found on the screen.")
     except ImageNotFoundException:
@@ -24,4 +24,4 @@ def example_locate_on_screen(image_path):
 
 if __name__ == "__main__":
     example_using_pyautogui()
-    example_locate_on_screen('screenshot.png')  # Replace 'test.png' with the path to your image file
+    example_locate_on_screen('screenshot.png')  # Replace 'screenshot.png' with the path to your image file
