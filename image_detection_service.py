@@ -29,12 +29,9 @@ class ImageDetectionService:
         return active_app['NSApplicationName']
 
     def _is_popup_window(self, window_info):
-        # Check if the window has a title bar
         if 'kCGWindowLayer' in window_info and window_info['kCGWindowLayer'] == 0:
-            # Check if the window is smaller than the screen
             if (window_info['kCGWindowBounds']['Width'] < self.screen_size.width and
                 window_info['kCGWindowBounds']['Height'] < self.screen_size.height):
-                # Check if the window is not minimized
                 if 'kCGWindowIsOnscreen' in window_info and window_info['kCGWindowIsOnscreen']:
                     return True
         return False
@@ -66,27 +63,21 @@ class ImageDetectionService:
             window_bounds = (bounds['X'], bounds['Y'], bounds['Width'], bounds['Height'])
             print(f"Window bounds: {window_bounds}")
             
-            # Check if it's a popup window
             is_popup = self._is_popup_window(window_info)
             print(f"Is popup window: {is_popup}")
             
-            # Adjust coordinates relative to window position
             content_x = x - window_bounds[0]
             content_y = y - window_bounds[1]
             print(f"Content coordinates: ({content_x}, {content_y})")
             
-            # Apply scaling factor
             scaled_x = int(content_x / self.scaling_factor)
             scaled_y = int(content_y / self.scaling_factor)
             print(f"Scaled coordinates: ({scaled_x}, {scaled_y})")
             
-            # Translate back to screen coordinates
             if is_popup:
-                # For popup windows, add the window position
                 translated_x = scaled_x + int(window_bounds[0] / self.scaling_factor)
                 translated_y = scaled_y + int(window_bounds[1] / self.scaling_factor)
             else:
-                # For full-screen windows, just use the scaled coordinates
                 translated_x = scaled_x
                 translated_y = scaled_y
             
@@ -96,7 +87,6 @@ class ImageDetectionService:
             translated_x = int(x / self.scaling_factor)
             translated_y = int(y / self.scaling_factor)
         
-        # Ensure coordinates are within screen bounds
         translated_x = max(0, min(translated_x, self.screen_size.width - 1))
         translated_y = max(0, min(translated_y, self.screen_size.height - 1))
         
@@ -204,23 +194,69 @@ class ImageDetectionService:
             time.sleep(delay)
         return self.click_image(template_path, confidence, debug)
 
-    @staticmethod
-    def main():
-        print("Image Detection Service Test")
-        print("-----------------------------")
+    def click_screen_preview(self, delay=3, confidence=0.8, debug=True):
+        print("\n--- Click Screen Preview Debug ---")
+        print(f"Waiting for {delay} seconds before capturing screenshot...")
+        time.sleep(delay)
         
-        service = ImageDetectionService()
+        # Capture full screen screenshot
+        full_screenshot = pyautogui.screenshot()
+        full_screenshot = cv2.cvtColor(np.array(full_screenshot), cv2.COLOR_RGB2BGR)
         
-        # Example usage
-        template_path = "path/to/your/image.png"  # Replace with actual path
-        result = service.detect_image(template_path, confidence=0.8, debug=True)
+        # Save full screenshot for debugging
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        full_screenshot_path = f"full_screen_{timestamp}.png"
+        cv2.imwrite(full_screenshot_path, full_screenshot)
+        print(f"Full screen screenshot saved: {full_screenshot_path}")
         
-        if result:
-            print(f"Image detected at: {result}")
-            success = service.click_image(template_path, confidence=0.8, debug=True)
-            print(f"Click operation {'successful' if success else 'failed'}.")
+        # Get the active window info
+        app_name = self._get_active_window_info()
+        window_info = self._get_window_info(app_name)
+        
+        if window_info:
+            bounds = window_info['kCGWindowBounds']
+            window_bounds = (bounds['X'], bounds['Y'], bounds['Width'], bounds['Height'])
+            print(f"Active window bounds: {window_bounds}")
         else:
-            print("Image not detected.")
+            print("Warning: Unable to get window info.")
+            window_bounds = (0, 0, full_screenshot.shape[1], full_screenshot.shape[0])
+        
+        # Use the full screenshot as both the source and the template image
+        source_image = full_screenshot
+        template_image = full_screenshot
+        
+        # Perform template matching
+        result = cv2.matchTemplate(source_image, template_image, cv2.TM_CCOEFF_NORMED)
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+        
+        print(f"Best match confidence: {max_val}")
+        
+        if max_val >= confidence:
+            h, w = template_image.shape[:2]
+            center_x = max_loc[0] + w // 2
+            center_y = max_loc[1] + h // 2
+            
+            print(f"Preview image center: ({center_x}, {center_y})")
+            print(f"Match confidence: {max_val}")
+            
+            # Click on the center of the detected preview
+            pyautogui.click(center_x, center_y)
+            print(f"Clicked at: ({center_x}, {center_y})")
+            
+            if debug:
+                # Draw a rectangle around the matched region and a circle at the click position
+                cv2.rectangle(full_screenshot, (int(max_loc[0]), int(max_loc[1])), (int(max_loc[0] + w), int(max_loc[1] + h)), (0, 255, 0), 2)
+                cv2.circle(full_screenshot, (int(center_x), int(center_y)), 5, (0, 0, 255), -1)
+                debug_image_path = f"debug_preview_click_{timestamp}.png"
+                cv2.imwrite(debug_image_path, full_screenshot)
+                print(f"Debug image with click location saved: {debug_image_path}")
+            
+            print("--- End of Click Screen Preview Debug ---\n")
+            return True
+        
+        print("Screen preview not found.")
+        print("--- End of Click Screen Preview Debug ---\n")
+        return False
 
 if __name__ == "__main__":
-    ImageDetectionService.main()
+    print("ImageDetectionService module. Import and use in your scripts.")
