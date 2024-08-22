@@ -28,7 +28,18 @@ class ImageDetectionService:
         active_app = workspace.activeApplication()
         return active_app['NSApplicationName']
 
-    def _get_window_bounds(self, app_name):
+    def _is_popup_window(self, window_info):
+        # Check if the window has a title bar
+        if 'kCGWindowLayer' in window_info and window_info['kCGWindowLayer'] == 0:
+            # Check if the window is smaller than the screen
+            if (window_info['kCGWindowBounds']['Width'] < self.screen_size.width and
+                window_info['kCGWindowBounds']['Height'] < self.screen_size.height):
+                # Check if the window is not minimized
+                if 'kCGWindowIsOnscreen' in window_info and window_info['kCGWindowIsOnscreen']:
+                    return True
+        return False
+
+    def _get_window_info(self, app_name):
         workspace = NSWorkspace.sharedWorkspace()
         running_apps = workspace.runningApplications()
         for app in running_apps:
@@ -38,37 +49,59 @@ class ImageDetectionService:
                 window_list = Quartz.CGWindowListCopyWindowInfo(options, Quartz.kCGNullWindowID)
                 for window in window_list:
                     if window['kCGWindowOwnerPID'] == pid:
-                        bounds = window['kCGWindowBounds']
-                        return (bounds['X'], bounds['Y'], bounds['Width'], bounds['Height'])
+                        return window
         return None
 
     def _translate_coordinates(self, x, y, app_name):
-        window_bounds = self._get_window_bounds(app_name)
+        window_info = self._get_window_info(app_name)
         
+        print("\n--- Coordinate Translation Debug ---")
         print(f"Raw coordinates: ({x}, {y})")
         print(f"Scaling factor: {self.scaling_factor}")
         print(f"Primary bounds: {self.primary_bounds}")
-        print(f"Window bounds: {window_bounds}")
         print(f"Screen size: {self.screen_size}")
         
-        if "chrome" in app_name.lower() or "firefox" in app_name.lower() or "safari" in app_name.lower():
-            if window_bounds:
-                content_x = x - window_bounds[0]
-                content_y = y - window_bounds[1]
-                translated_x = int(content_x / self.scaling_factor) + int(window_bounds[0])
-                translated_y = int(content_y / self.scaling_factor) + int(window_bounds[1])
+        if window_info:
+            bounds = window_info['kCGWindowBounds']
+            window_bounds = (bounds['X'], bounds['Y'], bounds['Width'], bounds['Height'])
+            print(f"Window bounds: {window_bounds}")
+            
+            # Check if it's a popup window
+            is_popup = self._is_popup_window(window_info)
+            print(f"Is popup window: {is_popup}")
+            
+            # Adjust coordinates relative to window position
+            content_x = x - window_bounds[0]
+            content_y = y - window_bounds[1]
+            print(f"Content coordinates: ({content_x}, {content_y})")
+            
+            # Apply scaling factor
+            scaled_x = int(content_x / self.scaling_factor)
+            scaled_y = int(content_y / self.scaling_factor)
+            print(f"Scaled coordinates: ({scaled_x}, {scaled_y})")
+            
+            # Translate back to screen coordinates
+            if is_popup:
+                # For popup windows, add the window position
+                translated_x = scaled_x + int(window_bounds[0] / self.scaling_factor)
+                translated_y = scaled_y + int(window_bounds[1] / self.scaling_factor)
             else:
-                print("Warning: Unable to get window bounds for browser.")
-                translated_x = int(x / self.scaling_factor)
-                translated_y = int(y / self.scaling_factor)
+                # For full-screen windows, just use the scaled coordinates
+                translated_x = scaled_x
+                translated_y = scaled_y
+            
+            print(f"Translated to screen: ({translated_x}, {translated_y})")
         else:
+            print("Warning: Unable to get window info.")
             translated_x = int(x / self.scaling_factor)
             translated_y = int(y / self.scaling_factor)
         
+        # Ensure coordinates are within screen bounds
         translated_x = max(0, min(translated_x, self.screen_size.width - 1))
         translated_y = max(0, min(translated_y, self.screen_size.height - 1))
         
-        print(f"Translated coordinates: ({translated_x}, {translated_y})")
+        print(f"Final translated coordinates: ({translated_x}, {translated_y})")
+        print("--- End of Coordinate Translation Debug ---\n")
         return translated_x, translated_y
 
     def _save_debug_image(self, image, filename, circles=None, rectangles=None):
@@ -136,6 +169,7 @@ class ImageDetectionService:
         result = self.detect_image(template_path, confidence, debug)
         if result:
             x, y = result
+            print("\n--- Click Operation Debug ---")
             print(f"Target click coordinates: ({x}, {y})")
             current_pos = pyautogui.position()
             print(f"Current mouse position: {current_pos}")
@@ -150,7 +184,9 @@ class ImageDetectionService:
             
             if final_pos != (x, y):
                 print(f"Warning: Final position {final_pos} doesn't match target {(x, y)}")
+                print(f"Difference: ({final_pos[0] - x}, {final_pos[1] - y})")
             
+            print("--- End of Click Operation Debug ---\n")
             return True
         else:
             print("Image not found. Click action not performed.")
